@@ -83,15 +83,11 @@ fi
 
 WP_DOWNLOAD_FILE=$WDIR/dump.xml
 echo Checking for wikipedia dump at $WP_DOWNLOAD_FILE
-if [ -f "$WP_DOWNLOAD_FILE" ]; then
-  echo File exists.
+echo Downloading wikipedia dump.
+if [ "$eval" == "false" ]; then
+  curl -# "$WIKI_MIRROR/${LANGUAGE}wiki/latest/${LANGUAGE}wiki-latest-pages-articles.xml.bz2" | bzcat > $WDIR/dump.xml
 else
-  echo Downloading wikipedia dump.
-  if [ "$eval" == "false" ]; then
-    curl -# "$WIKI_MIRROR/${LANGUAGE}wiki/latest/${LANGUAGE}wiki-latest-pages-articles.xml.bz2" | bzcat > $WDIR/dump.xml
-  else
-    curl -# "$WIKI_MIRROR/${LANGUAGE}wiki/latest/${LANGUAGE}wiki-latest-pages-articles.xml.bz2" | bzcat | python $BASE_DIR/scripts/split_train_test.py 1200 $WDIR/heldout.txt > $WDIR/dump.xml
-  fi
+  curl -# "$WIKI_MIRROR/${LANGUAGE}wiki/latest/${LANGUAGE}wiki-latest-pages-articles.xml.bz2" | bzcat | python $BASE_DIR/scripts/split_train_test.py 1200 $WDIR/heldout.txt > $WDIR/dump.xml
 fi
 
 cd $WDIR
@@ -108,22 +104,16 @@ fi
 # DBpedia extraction:
 ########################################################################################################
 
-#Download:
 echo "Creating DBpedia nt files..."
 cd $BASE_WDIR
 
-if [ -d extraction-framework ]; then
-    echo "Updating DBpedia Spotlight..."
-    cd extraction-framework
-    git reset --hard HEAD
-    git pull
-    mvn install
-else
-    echo "Setting up DEF..."
-    git clone git://github.com/dbpedia/extraction-framework.git
-    cd extraction-framework
-    mvn install
-fi
+rm -rf extraction-framework
+echo "Setting up DEF..."
+git clone git://github.com/dbpedia/extraction-framework.git
+cd extraction-framework
+# 2018-01-08
+git checkout 10d102decb6dc4e86bfb3af9eae6d524f743c7a2
+mvn install
 
 cd dump
 
@@ -142,6 +132,7 @@ ontology=../ontology.xml
 mappings=../mappings
 uri-policy.uri=uri:en; generic:en; xml-safe-predicates:*
 format.nt.gz=n-triples;uri-policy.uri
+compareDatasetIDs=false
 EOF
 
 if [[ ",ga,ar,be,bg,bn,ced,cs,cy,da,eo,et,fa,fi,gl,hi,hr,hu,id,ja,lt,lv,mk,mt,sk,sl,sr,tr,ur,vi,war,zh," == *",$LANGUAGE,"* ]]; then #Languages with no disambiguation definitions
@@ -156,7 +147,8 @@ zcat $dumpdir/${LANGUAGE}wiki-${dumpdate}-instance-types*.nt.gz > $WDIR/instance
 zcat $dumpdir/${LANGUAGE}wiki-${dumpdate}-disambiguations-unredirected.nt.gz > $WDIR/disambiguations.nt
 zcat $dumpdir/${LANGUAGE}wiki-${dumpdate}-redirects.nt.gz > $WDIR/redirects.nt
 
-rm -Rf $dumpdir
+# CHRIS: leave commented
+#rm -Rf $dumpdir
 
 ########################################################################################################
 # Setting up Spotlight:
@@ -164,19 +156,14 @@ rm -Rf $dumpdir
 
 cd $BASE_WDIR
 
-if [ -d dbpedia-spotlight ]; then
-    echo "Updating DBpedia Spotlight..."
-    cd dbpedia-spotlight
-    git reset --hard HEAD
-    git pull
-    mvn -T 1C -q clean install
-else
-    echo "Setting up DBpedia Spotlight..."
-    git clone --depth 1 https://github.com/dbpedia-spotlight/dbpedia-spotlight-model
-    mv dbpedia-spotlight-model dbpedia-spotlight
-    cd dbpedia-spotlight
-    mvn -T 1C -q clean install
-fi
+rm -rf dbpedia-spotlight
+echo "Setting up DBpedia Spotlight..."
+git clone --depth 1 https://github.com/dbpedia-spotlight/dbpedia-spotlight-model
+mv dbpedia-spotlight-model dbpedia-spotlight
+cd dbpedia-spotlight
+# 2018-02-18
+git checkout d7c153632126d449005c7ca458070e69e1e5baf8
+mvn -T 1C -q clean install
 
 
 ########################################################################################################
@@ -200,8 +187,10 @@ if [ "$blacklist" != "false" ]; then
   grep -v -f $blacklist $WDIR/uriCounts_all > $WDIR/uriCounts
 fi
 
-echo "Finished wikistats extraction. Cleaning up..."
-rm -f $WDIR/dump.xml
+
+#Chris: leave commented
+#echo "Finished wikistats extraction. Cleaning up..."
+#rm -f $WDIR/dump.xml
 
 
 ########################################################################################################
@@ -211,6 +200,25 @@ rm -f $WDIR/dump.xml
 #Create the model:
 cd $BASE_WDIR/dbpedia-spotlight
 
+# CHRIS: concat any extra DBPedia type files onto the existing `instance_types.nt` file
+# get all of the dbpedia type datasets
+wget --directory-prefix=$WDIR \
+  -r \
+  -nd \
+  --no-parent \
+  -A 'instance_types_*.ttl.bz2' \
+  http://downloads.dbpedia.org/2016-10/core-i18n/$LANGUAGE/
+
+# concat them all together
+bzcat $WDIR/*.bz2 >> $WDIR/extra_instance_types.ttl
+# now concat the ones we extracted with the dbpedia ones
+cat $WDIR/extra_instance_types.ttl $WDIR/instance_types.nt > $WDIR/all_instance_types.nt
+# now replace the original instance types file
+mv $WDIR/all_instance_types.nt $WDIR/instance_types.nt
+
+# Remove a previous model
+echo "If there is an existing model at $TARGET_DIR, I\'m removing it now"
+rm -rf $TARGET_DIR
 mvn -pl index exec:java -Dexec.mainClass=org.dbpedia.spotlight.db.CreateSpotlightModel -Dexec.args="$2 $WDIR $TARGET_DIR $opennlp $STOPWORDS $4Stemmer"
 
 if [ "$eval" == "true" ]; then
@@ -221,9 +229,10 @@ curl https://raw.githubusercontent.com/dbpedia-spotlight/model-quickstarter/mast
 curl "$WIKI_MIRROR/${LANGUAGE}wiki/latest/${LANGUAGE}wiki-latest-pages-articles.xml.bz2-rss.xml" | grep link | sed -e 's/^.*<link>//' -e 's/<[/]link>.*$//' | uniq >> $TARGET_DIR/README.txt
 
 
-echo "Collecting data..."
-cd $BASE_DIR
-mkdir -p data/$LANGUAGE && mv $WDIR/*Counts data/$LANGUAGE
-gzip $WDIR/*.nt &
+# Chris: what would we need this for?
+#echo "Collecting data..."
+#cd $BASE_DIR
+#mkdir -p data/$LANGUAGE && mv $WDIR/*Counts data/$LANGUAGE
+#gzip $WDIR/*.nt &
 
 set +e
