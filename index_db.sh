@@ -82,7 +82,6 @@ if [ -z "$WIKI_MIRROR" ]; then
 fi
 
 WP_DOWNLOAD_FILE=$WDIR/dump.xml
-echo Checking for wikipedia dump at $WP_DOWNLOAD_FILE
 echo Downloading wikipedia dump.
 if [ "$eval" == "false" ]; then
   curl -# "$WIKI_MIRROR/${LANGUAGE}wiki/latest/${LANGUAGE}wiki-latest-pages-articles.xml.bz2" | bzcat > $WDIR/dump.xml
@@ -113,6 +112,8 @@ git clone git://github.com/dbpedia/extraction-framework.git
 cd extraction-framework
 # 2018-01-08
 git checkout 10d102decb6dc4e86bfb3af9eae6d524f743c7a2
+# copy our version of universal.properties
+cp $BASE_WDIR/universal.properties  core/src/main/resources/universal.properties
 mvn install
 
 cd dump
@@ -147,8 +148,7 @@ zcat $dumpdir/${LANGUAGE}wiki-${dumpdate}-instance-types*.nt.gz > $WDIR/instance
 zcat $dumpdir/${LANGUAGE}wiki-${dumpdate}-disambiguations-unredirected.nt.gz > $WDIR/disambiguations.nt
 zcat $dumpdir/${LANGUAGE}wiki-${dumpdate}-redirects.nt.gz > $WDIR/redirects.nt
 
-# CHRIS: leave commented
-#rm -Rf $dumpdir
+rm -Rf $dumpdir
 
 ########################################################################################################
 # Setting up Spotlight:
@@ -188,9 +188,8 @@ if [ "$blacklist" != "false" ]; then
 fi
 
 
-#Chris: leave commented
-#echo "Finished wikistats extraction. Cleaning up..."
-#rm -f $WDIR/dump.xml
+echo "Finished wikistats extraction. Cleaning up..."
+rm -f $WDIR/dump.xml
 
 
 ########################################################################################################
