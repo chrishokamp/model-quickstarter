@@ -201,19 +201,19 @@ cd $BASE_WDIR/dbpedia-spotlight
 
 # CHRIS: concat any extra DBPedia type files onto the existing `instance_types.nt` file
 # get all of the dbpedia type datasets
-wget --directory-prefix=$WDIR \
-  -r \
-  -nd \
-  --no-parent \
-  -A 'instance_types_*.ttl.bz2' \
-  http://downloads.dbpedia.org/2016-10/core-i18n/$LANGUAGE/
-
-# concat them all together
-bzcat $WDIR/*.bz2 >> $WDIR/extra_instance_types.ttl
-# now concat the ones we extracted with the dbpedia ones
-cat $WDIR/extra_instance_types.ttl $WDIR/instance_types.nt > $WDIR/all_instance_types.nt
-# now replace the original instance types file
-mv $WDIR/all_instance_types.nt $WDIR/instance_types.nt
+#wget --directory-prefix=$WDIR \
+#  -r \
+#  -nd \
+#  --no-parent \
+#  -A 'instance_types_*.ttl.bz2' \
+#  http://downloads.dbpedia.org/2016-10/core-i18n/$LANGUAGE/
+#
+## concat them all together
+#bzcat $WDIR/*.bz2 >> $WDIR/extra_instance_types.ttl
+## now concat the ones we extracted with the dbpedia ones
+#cat $WDIR/extra_instance_types.ttl $WDIR/instance_types.nt > $WDIR/all_instance_types.nt
+## now replace the original instance types file
+#mv $WDIR/all_instance_types.nt $WDIR/instance_types.nt
 
 # Remove a previous model
 echo "If there is an existing model at $TARGET_DIR, I\'m removing it now"
